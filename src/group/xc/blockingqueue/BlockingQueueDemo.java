@@ -1,23 +1,10 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package group.xc.blockingqueue;
 
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Semaphore;
 
 /**
  * 阻塞队列：
@@ -31,9 +18,31 @@ import java.util.List;
  * 5、SynchronousQueue:不储存元素的阻塞队列，也即单个元素的队列
  * 6、LinkedTransferQueue: 由链表结构组成的无界阻塞队列
  * 7、LinkedBlockingDeque: 由链表结构组成的双向阻塞队列
+ *
+ * 操作方法分为：
+ * 1、方法类型    抛出异常     特殊值       阻塞         超时
+ * 2、插入         add(e)     offer(e)     put()        offer(e,time,unit)
+ * 2、移除         remove()   poll()       take()       poll(time,unit)
+ * 2、检查        element(e)  peek()       NO           NO
+ *
+ * 抛出异常：
+ * 当阻塞队列满时，再往队列里add元素，会抛出IllegalStateException: Queue full
+ * 当阻塞队列空时，再往队列里remove元素会抛NoSuchElementException
+ *
+ * 特殊值:
+ * 插入方法，成功true 失败 false
+ * 移除方法：成功返回出队的元素，队列里面没有就返回null
+ *
+ * 阻塞：
+ * 当阻塞队列满时，生产者线程继续往队列里put元素，队列会一直阻塞生产线程直到put数据成功或响应中断退出
+ * 当阻塞队列空时，消费者线程视图从队列里take元素，队列一直会阻塞消费线程，直到队列可用
+ *
+ * 超时:
+ * 当阻塞队列满时，队列会阻塞生产者线程一定时间，超过限时后，生产者线程就会退出阻塞并返回false
+ *
  */
 public class BlockingQueueDemo {
     public static void main(String[] args) {
-        List list = null;
+        BlockingQueue<String> strings = new ArrayBlockingQueue<>(1);
     }
 }
