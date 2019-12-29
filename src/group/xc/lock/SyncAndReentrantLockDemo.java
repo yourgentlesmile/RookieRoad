@@ -8,7 +8,7 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  * 1、synchronized是关键字，属于jvm层面
  * 通过monitorenter和monitorexit
- * monitorenter(底层是通过monitor对象来完成的，其实wait/notify等方法也依赖于monitor对象，只有在同步块或方法
+ * (底层是通过monitor对象来完成的，其实wait/notify等方法也依赖于monitor对象，只有在同步块或方法
  * 中才能调wait/notify等方法)
  *
  * lock是具体类(java.util.concurrent.locks.lock)，是api层面的锁
