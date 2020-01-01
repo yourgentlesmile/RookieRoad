@@ -94,8 +94,9 @@
 -Xms 等价于 -XX:InitialHeapSize  
 -Xmx 等价于 -XX:MaxHeapSize  
 所以，Xms和Xmx就相当于那两个参数的别名，因此，这两个参数是属于XX参数。  
+同理-Xss 等价于 -XX:ThreadStackSize
 
-### 堆内存相关
+### JVM内存相关
 
 ![image-20191229231732877](assets/image-20191229231732877.png)
 
@@ -106,3 +107,36 @@ long totalMemory = Runtime.getRuntime().totalMemory();
 long maxMemory = Runtime.getRuntime().maxMemory();
 ```
 
+如果JVM在启动的时候没有指定**Xms**大小，则默认是系统总内存的**64分之一**  
+如果JVM在启动的时候没有指定**Xmx**大小，则默认是系统总内存的**4分之一**   
+#### -Xss 设置线程栈大小
+当没有设置栈大小的时候，使用`jinfo -flag ThreadStackSize [pid] `会发现显示的是0值  
+![image-20200101215724331](assets/image-20200101215724331.png)  
+在这里，0就代表了使用默认值，在不同的平台，有可能有着不同的默认值  
+![image-20200101220129084](assets/image-20200101220129084.png)
+
+java官方文档地址：https://docs.oracle.com/en/java/javase/11/tools/java.html  
+
+#### -Xmn 设置年轻代大小
+
+![image-20200101220902147](assets/image-20200101220902147.png)
+
+#### -XX:MetaspaceSize 设置元空间大小
+元空间的本质和永久代相似，都是对JVM规范中的方法区的实现。不过元空间与永久代之间最大的区别在于：**元空间不在虚拟机中，而是使用本地内存**。  
+因此，默认情况下，元空间大小仅仅受本地内存限制。  
+
+#### -XX:PrintGCDetails 打印GC信息
+
+![image-20200101222442361](assets/image-20200101222442361.png)
+
+GC信息解读  
+
+![image-20200101222551342](assets/image-20200101222551342.png)
+
+FGC信息解读  
+
+![image-20200101222852754](assets/image-20200101222852754.png)  
+![image-20200101223035107](assets/image-20200101223035107.png)  
+#### -XX:SurvivorRatio 调整新生代(Eden)与幸存区(survivor)空间大小比例
+默认值是8  
+![image-20200101223545022](assets/image-20200101223545022.png)
