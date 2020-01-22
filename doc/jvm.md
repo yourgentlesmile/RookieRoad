@@ -150,6 +150,10 @@ NewRatio值就是设置老年代的占比，剩下的1给新生代
 #### -XX:MaxTenuringThreshold 最大晋升年龄
 -XX:MaxTenuringThreshold = 15表示，一个对象，从新生代到老年代，要经过15次垃圾回收，才能晋升到老年代  
 如果设置为0的话，年轻代在第一次GC之后是不会经过Survivor区，直接进入老年代。对于老年代比较多的应用，可以提高效率。如果将此值设置为一个较大值，则年轻代对象会在survivor区进行多次复制，这样可以增加对象在年轻代的存活时间，增加在年轻代被回收的概率。  
+### JVM的两种模式
+当使用的是32位的Windows操作系统，不论硬件如何都默认使用Client的JVM模式  
+32位其他操作系统，2G内存同时有2个cpu以上用Server模式，低于该配置还是Client模式  
+64位，只有server模式
 
 ## 强软弱虚四种引用
 
@@ -228,3 +232,83 @@ GC回收时间过长时会抛出OOM。过长的定义是，超过98%的时间用
 但如果不断分配本地内存，堆内存很少使用，那么JVM就不需要执行GC，DirectByteBuffer对象们就不会被回收，这时候堆内存充足，但本地内存可能已经使用光了，再次尝试分配本地内存就会出现OutOfMemoryError
 
 > 一般默认JVM可以使用的本地内存为最大物理内存的1/4
+
+## Unable to create new native thread 
+
+首先考虑是不是内存不足，可能由于堆设置过大，导致线程可使用的内存过少，因为线程创建是要为其分配PC计数器，虚拟机栈，本地方法栈的，在不增大内存的情况下，可以减小堆大小和栈大小来创建更多的线程。但是通过现场的jmap -heap [pid] 查看内存占用其实并不多，用jstack统计线程数，有近500，大部分是来自tomcat线程池与hbase线程。所以考虑是不是hbase抖动。
+由于hbase端出现抖动，导致线程池线程数量拉高，这个现象也会在hbase线程池体现，因为一个请求会由一个tomcat线程来处理，同时也对应着一个hbase线程池的线程，当线程池的达到了最大核心线程的数量，同时阻塞队列满的时候，就会继续开启新的线程来进行处理，直到达到了线程池最大线程数的限制，spring-boot自带的tomcat默认线程池最大线程数是200，所以最坏情况下会同时处理200个请求，其他的进入等待队列，200个请求也会同样对应hbase连接池的200个处理线程，这里保守就有400个线程。又由于当时服务器设置的max user processes只有1024，同时，服务器上还部署着一些其他java服务，所以高峰时刻，冲过了1024，达到了max user processes的限制。系统拒绝了线程的创建，导致了这个问题出现。由于不能随意重启线上服务，所以我通过修改/proc/{pid}/limits中的Max processes 对应的soft limits，使得服务能继续创建线程，暂时维持了服务稳定，，同时其他服务也一并修改，但是后续评估发现，max user processes也的确设置的过小了，就将这个值修改为了10240，并择机将机器上服务全部滚动重启，使参数生效。
+
+对于这个问题，可以通过改大max user processes参数，也可以降低tomcat 线程池大小，或者控制hbase线程池大小来缓解这个问题
+
+## Metaspace
+Java8及以后的版本使用Metaspace来替代永久代。  
+Metaspace是方法区在HotSpot中的实现，它与永久代最大的区别在于: Metaspace并不在虚拟机内存中而是使用的本地内存，也就是说在Java8 类的元数据信息被存储在叫做Metaspace的native memory当中  
+永久代(Java8后被元空间取代了) 存放了以下信息：
+1.已被虚拟机加载的类信息
+2.运行时常量池
+3.字符串常量池(JDK7从永久代移出)
+4.静态变量(JDK7 从永久代移出)
+5.即时编译后的代码  
+> The Java Virtual Machine has a method area that is shared among all Java Virtual Machine threads. The method area is analogous to the storage area for compiled code of a conventional language or analogous to the "text" segment in an operating system process. It stores per-class structures such as the **run-time constant pool**, **field** and **method data**, and **the code for methods** and **constructors**, including the special methods (§2.9) used in class and instance initialization and interface initialization
+>
+> 引用自：《Java虚拟机规范》https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-2.html#jvms-2.5.4
+
+
+所以，模拟Metaspace溢出。只要不断生成新的类往Metaspace中写即可。  动态生成类可以使用CGLIB 的字节码技术
+
+# GC相关
+
+GC算法(复制算法/标记清除/标记整理/分代算法)是内存回收的方法论，垃圾收集器就是算法的落地实现  
+
+> 天上飞的理念，需要有落地的实现 ^_^
+
+![image-20200122103618017](F:\IdeaProject\RookieRoad\doc\assets\image-20200122103618017.png)
+
+串行(serial)，并行(parallel)，并发(concurrent)，G1  
+
+串行：垃圾回收前，先停止用户线程(STW:stop the world)，然后只有一个垃圾收集线程工作，由于垃圾收集的时候会**暂停**用户**所有**线程，不适合服务器环境  
+并行：垃圾回收前，先停止用户线程，然后有多个垃圾收集线程工作，适用于科学计算/大数据处理等弱交互场景  
+并发：垃圾回收时，用户线程和垃圾收集线程同时执行(不一定是并行，可能是交替执行)，不需要停顿用户线程，适用于对响应时间有要求的场景  
+G1: G1垃圾回收器将堆内存分隔成不同的区域然后并发的对其进行垃圾回收
+
+![image-20200122105036499](F:\IdeaProject\RookieRoad\doc\assets\image-20200122105036499.png)
+
+查看默认的垃圾回收器，使用-XX:+PrintCommandLineFlags 可以打印出正在使用的参数项
+```shell
+F:\IdeaProject\RookieRoad>java -XX:+PrintCommandLineFlags -version
+-XX:InitialHeapSize=132499904 -XX:MaxHeapSize=2119998464 -XX:+PrintCommandLineFlags -XX:+UseCompressedClassPointe
+rs -XX:+UseCompressedOops -XX:-UseLargePagesIndividualAllocation -XX:+UseParallelGC
+java version "1.8.0_71"
+Java(TM) SE Runtime Environment (build 1.8.0_71-b15)
+Java HotSpot(TM) 64-Bit Server VM (build 25.71-b15, mixed mode)
+```
+可以看到，jdk8默认使用的是`ParallelGC`  
+对于运行中的服务，可以使用jinfo进行查看`jinfo -flag UseParallelGC [pid]`
+## GC算法
+
+
+## 垃圾回收器
+![img](F:\IdeaProject\RookieRoad\doc\assets\1638582-20200116113445995-1431220740.png)
+
+上面函数式JVM验证GC配置的合理性。同时也可以看出，有如代码所示的几种垃圾回收器  
+UseSerialGC  
+UserParallelGC (parallel scavenge)  
+UseParallelOldGC  
+UseConcMarkSweepGC  
+UseParNewGC  
+UseG1GC
+
+![image-20200122171802822](F:\IdeaProject\RookieRoad\doc\assets\image-20200122171802822.png)  
+
+![image-20200122172013806](F:\IdeaProject\RookieRoad\doc\assets\image-20200122172013806.png)
+
+打了叉的表示连线的两个是**不能**组合使用的  
+### 串行收集器 SerialGC
+一个单线程的收集器，在进行垃圾收集的售后必须暂停其他所有工作线程直到它收集结束。  
+
+![image-20200122181704321](F:\IdeaProject\RookieRoad\doc\assets\image-20200122181704321.png)
+
+串行收集器是最古老，最稳定以及效率高德收集器，只使用一个线程去回收，但其在进行垃圾收集的过程中可能会产生较长的停顿(STW).虽然在收集垃圾过程中需要暂停所有其他的工作线程，但是它简单高效，对于限定单个CPU环境来说，没有线程交互的开销可以获得最高的单线程垃圾收集效率，因此Serial垃圾收集器依然是Java虚拟机运行在Client模式下默认的新生代垃圾收集器。  
+
+在开启后，会使用SerialGC(Young区使用) + Serial Old(Old区用)的收集器组合  
+在新生代与老年代都会使用串行垃圾回收器，新生代使用复制算法，老年代使用标记-整理算法
