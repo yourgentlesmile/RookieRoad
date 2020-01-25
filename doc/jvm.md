@@ -241,6 +241,10 @@ GC回收时间过长时会抛出OOM。过长的定义是，超过98%的时间用
 
 对于这个问题，可以通过改大max user processes参数，也可以降低tomcat 线程池大小，或者控制hbase线程池大小来缓解这个问题
 
+`ps -mp [PID] -o THREAD, tid, time  其中-m 表示显示所有线程，-p pid进程使用的CPU时间 -o 该参数后是用户自定义格式`  
+
+`转16进制 printf "%x\n" [线程ID]`
+
 ## Metaspace
 Java8及以后的版本使用Metaspace来替代永久代。  
 Metaspace是方法区在HotSpot中的实现，它与永久代最大的区别在于: Metaspace并不在虚拟机内存中而是使用的本地内存，也就是说在Java8 类的元数据信息被存储在叫做Metaspace的native memory当中  
