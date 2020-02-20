@@ -147,6 +147,7 @@ FGC信息解读
 -XX:NewRatio=2 新生代占1，老年代占2，年轻代占整个堆的1/3  
 -XX:NewRatio=4 新生代占1，老年代占4，年轻代占整个堆的1/5  
 NewRatio值就是设置老年代的占比，剩下的1给新生代  
+
 #### -XX:MaxTenuringThreshold 最大晋升年龄
 -XX:MaxTenuringThreshold = 15表示，一个对象，从新生代到老年代，要经过15次垃圾回收，才能晋升到老年代  
 如果设置为0的话，年轻代在第一次GC之后是不会经过Survivor区，直接进入老年代。对于老年代比较多的应用，可以提高效率。如果将此值设置为一个较大值，则年轻代对象会在survivor区进行多次复制，这样可以增加对象在年轻代的存活时间，增加在年轻代被回收的概率。  
@@ -446,3 +447,110 @@ Survivor区的数据移动到新的Survivor区，部分数据会晋升到Old区
 单CPU或小内存，单机程序：SerialGC  
 多CPU，需要最大吞吐量，如后台计算型应用：ParallelGC  
 多CPU，追求低停顿时间，需快速响应如互联网应用: CMS + ParNew 
+
+
+
+# JVM结构
+
+![image-20191222185611484](assets/image-20191222185611484.png)  
+
+沙箱安全机制：https://blog.csdn.net/qq_30336433/article/details/83268945
+
+## 类加载器(ClassLoader)
+
+负责加载class文件，class文件在**文件开头有特定的文件表示**，将class文件字节码内容加载到内存中，并将这些内容转换成方法区中的运行时数据结构并且ClassLoader只负责class文件的加载，至于它是否可以运行，则由Execution engine决定。
+![image-20200219145048421](assets/image-20200219145048421.png)  
+
+![image-20200219160217969](assets/image-20200219160217969.png)  
+
+![img](assets/1935847-26736dcecf9907ce.jpg)
+
+启动类加载器(Bootstrap Class Loader)(C++)  
+扩展类加载器(Extension Class Loader)(Java)  
+应用程序类加载器(AppClassLoader) 也叫系统类加载器，加载当前应用的classpath的所有类  
+
+通过getClassLoader方法，可以获取到一个类的类加载器  
+```java
+Object o = new Object();
+ClassLoaderDemo d = new ClassLoaderDemo();
+System.out.println(o.getClass().getClassLoader());
+System.out.println(d.getClass().getClassLoader());
+System.out.println(d.getClass().getClassLoader().getParent());
+//getParent方法可以获得该类加载器的父加载器
+System.out.println(d.getClass().getClassLoader().getParent().getParent());
+
+输出：
+null
+sun.misc.Launcher$AppClassLoader@18b4aac2
+sun.misc.Launcher$ExtClassLoader@45ee12a7
+null
+```
+
+BootstrapClassLoader是获取不到它的引用的，也意味着所有通过BootstrapClassLoader加载的类，通过调用getClassLoader()返回的都是null。因为BootstrapClassLoader是C/C++编写的，它本身是虚拟机的一部分，所以它并不是一个JAVA类，也就是无法在Java代码中获取它的引用。
+
+### 双亲委派机制
+当类加载器需要加载一个类的时候，它会先委派它的父加载器来进行加载，当父加载器无法加载的时候(在它的加载路径下没有找到所需加载的Class)，再亲自来加载，如果亲自加载也无法加载，则报ClassNotFoundException.
+比如，加载位于rt.jar包中的类java.lang.Object，不管是哪个加载器加载了这个类，最终都是委托给顶层的启动类加载器进行加载，这样就保证了使用不同的类加载器最终得到的都是同样一个Object对象  
+使用的好处：  
+  可以保证Java原生的类的安全，避免被篡改。  
+## Execution Engine 
+负责解释命令，提交给操作系统执行  
+## Native Interface 本地结构
+
+本地接口的作用是融合不同的编程语言为Java所用，它的初衷是融合C/C++程序，Java诞生的时候是C/C++横行的时候，要想立足，必须有调用C/C++程序，于是就在内存中专门开辟了一块区域处理标记为native的代码，它的具体做法是Native Method Stack中登记native方法，在Execution Engine 执行时加载native libraries。  
+
+目前该方法使用的越来越少，除非是与硬件有关的应用，比如通过Java程序驱动打印机或者Java系统管理生产设备，在企业级应用中已经比较少见。因为现在的异构领域间的通信很发达，比如可以使用socket通信，也可以使用Web Service等等。
+
+## RunTime Data Area
+
+### Native Method Stack 本地方法栈(线程私有)
+
+它的具体做法是NativeMethod Stack中登记native方法，在Execution Engine执行时加载本地方法库。  
+
+### Program Counter Register 程序计数器(线程私有)
+
+每个线程都有一个程序计数器，是线程私有的，就是一个指针，指向方法区中的方法字节码(**用来储存指向下一条指令的地址，也即将要执行的指令代码**)，由执行引擎读取下一条指令，是一个非常小的内存空间(**也是JVM中唯一一个没有定义OOM的内存区域**)  
+
+这块内存区域很小，它是当前线程所执行的字节码的行号指示器，字节码解释器通过改变这个计数器的值来选取下一条需要执行的字节码指令。  
+
+注意：如果执行的是一个Native方法，那这个计数器是空的。  
+
+程序计数器用于完成分支、循环、跳转、异常处理，线程恢复等基础功能。  
+
+### Method Area 方法区(线程共享)
+
+供各个线程的运行时内存区域。**它储存了每一个类的结构信息**，例如运行时常量池(Runtime Constant Pool)、字段和方法数据、构造函数和普通方法的字节码内容。上面讲的是规范，在不同虚拟机里面实现是不一样的，最典型的就是永久代(PermGen space)和元空间(Metaspace)
+
+> 实例储存在堆中，和方法区无关
+
+> 在jdk1.7的时候，符号引用(Symbols)转移到了native heap；String常量池(interned strings)转移到了 java heap; 类的静态变量(class statics)转移到了java heap.
+>
+> 在1.8的时候，彻底用元空间替代了永久代
+
+### VM Stack 虚拟机栈(线程私有)
+
+栈也叫栈内存，主管Java程序的运行，是在**线程创建时创建**(所以是线程私有)，它的生命周期是跟随线程的生命期，线程结束栈内存也就释放，所以对于栈来说不存在垃圾回收问题。生命周期和线程一直，是线程私有的。8种基本类型(byte, char, boolean, short, int, long, float, double) + 对象的引用变量 + 实例方法都是在函数的栈内存中分配。  
+
+栈帧中主要保存3类数据：  
+
+本地变量(Local Variables) : 输入参数和输出参数以及方法内的变量；  
+
+栈操作(Operand Stack) : 记录出栈、入栈的操作；  
+
+栈帧数据(Frame Data) : 包括类文件、方法等。  
+
+每一个方法执行的同时都会创建一个栈帧，用于存储局部变量表、操作数栈、指向运行时常量池的引用，动态链接、方法返回地址信息，每一个方法从调用直至执行完毕的过程，就对应着一个栈帧在虚拟机中入栈到出栈的过程。栈的大小和具体JVM的实现有关，通常在256K~1MB之间
+
+![image-20200220150027109](assets/image-20200220150027109.png)  
+
+#### 栈，堆，方法区的交互关系
+
+![image-20200220151911936](assets/image-20200220151911936.png)
+
+### Heap 堆
+
+从**内存回收**的角度来看，由于现在收集器基本都采用**分代收集算法**，所以Java堆中还可以细分为：新生代，老年代：再细致一点的有Eden空间、From Survivor、To Survivor。  
+
+从**内存分配**的角度来看，线程共享的Java堆中可能划分出多个线程私有的分配缓冲区(Thread Local Allocation Buffer, TLAB)。  
+
+但是无论怎么划分，都与存放内容无关，无论哪个区域，存储的都仍然是对象实例。

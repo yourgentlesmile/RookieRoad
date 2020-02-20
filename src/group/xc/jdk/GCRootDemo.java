@@ -1,6 +1,4 @@
-package group.xc.jvm;
-
-import java.util.Arrays;
+package group.xc.jdk;
 
 public class GCRootDemo {
     private int _1MB = 1 * 1024 * 1024;
