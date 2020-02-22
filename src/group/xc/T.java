@@ -25,16 +25,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class T {
+    static class PP {
+        public int val;
+        public PP next;
+    }
     public static void main(String[] args) throws UnsupportedEncodingException {
-        List<Integer> integers = new ArrayList<>();
-        for (int i = 0; i < 100; i++) {
-            integers.add(i);
-        }
-
-        List<Integer> parallelList = new ArrayList<>();
-        integers.stream().parallel().filter(i->i%2==1).forEach(i->parallelList.add(i));
-        for (int i = 0; i < parallelList.size(); i++) {
-            System.out.println(parallelList.get(i));
-        }
+        PP pp = new PP();
+        pp.val = 1;
+        PP pp1 = new PP();
+        pp1.val = 2;
+        PP pp2 = new PP();
+        pp2.val = 3;
+        pp.next = pp1;
+        pp1.next = pp2;
+        pp2.next = null;
+        PP kk = pp;
+        kk.val  = 222;
+        System.out.println(pp.val);
     }
 }
