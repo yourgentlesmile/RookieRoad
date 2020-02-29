@@ -392,3 +392,9 @@ final Node<K,V> removeNode(int hash, Object key, Object value,
 内部使用的就是get方法所调用的getNode方法
 
 ![image-20200222205252635](assets/image-20200222205252635.png)
+
+# Java 集合接口
+
+![img](assets/timg.jpg)
+
+![img](assets/timg-1582976109478.jpg)
