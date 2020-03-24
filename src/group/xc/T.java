@@ -21,26 +21,20 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class T {
-    static class PP {
-        public int val;
-        public PP next;
-    }
     public static void main(String[] args) throws UnsupportedEncodingException {
-        PP pp = new PP();
-        pp.val = 1;
-        PP pp1 = new PP();
-        pp1.val = 2;
-        PP pp2 = new PP();
-        pp2.val = 3;
-        pp.next = pp1;
-        pp1.next = pp2;
-        pp2.next = null;
-        PP kk = pp;
-        kk.val  = 222;
-        System.out.println(pp.val);
+        HashMap<String, String> map = new HashMap<>();
+        map.put("key1", "value1");
+        map.put("key2", "value2");
+        map.put("key3", "value3");
+        map.put("key4", "value4");
+        Set<String> strings = map.keySet();
+        System.out.println(strings.toString());
+        Collection<String> values = map.values();
+        System.out.println(values.toString());
+        Set<Map.Entry<String, String>> entries = map.entrySet();
+        System.out.println(entries.toString());
     }
 }

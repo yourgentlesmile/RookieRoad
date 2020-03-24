@@ -209,7 +209,7 @@ final Node<K,V>[] resize() {
             threshold = Integer.MAX_VALUE;
             return oldTab;
         }
-        //正常扩容，oldCap左移一位实现翻倍，并且赋值给newCap，newCap小鱼数组最大值限制 且 扩容之前阈值>=16
+        //正常扩容，oldCap左移一位实现翻倍，并且赋值给newCap，newCap小于数组最大值限制 且 扩容之前阈值>=16
         //这种情况下，下一次扩容阈值等于当前阈值翻倍
         else if ((newCap = oldCap << 1) < MAXIMUM_CAPACITY &&
                  oldCap >= DEFAULT_INITIAL_CAPACITY)
@@ -265,7 +265,7 @@ final Node<K,V>[] resize() {
                         next = e.next; 
                         if ((e.hash & oldCap) == 0) {
                             if (loTail == null)
-                                loHead = e;
+                                loHead = e;	
                             else
                                 loTail.next = e;
                             loTail = e;
@@ -279,7 +279,7 @@ final Node<K,V>[] resize() {
                         }
                     } while ((e = next) != null);
                     if (loTail != null) {
-                        //这里的next可能会指向旧值，由于地位链表已到了末尾，直接赋null即可
+                        //这里的next可能会指向旧值，由于低位链表已到了末尾，直接赋null即可
                         loTail.next = null;
                         newTab[j] = loHead;
                     }
@@ -398,3 +398,34 @@ final Node<K,V> removeNode(int hash, Object key, Object value,
 ![img](assets/timg.jpg)
 
 ![img](assets/timg-1582976109478.jpg)
+
+# 标记型接口
+
+## Serializable
+
+## Cloneable
+
+## RandomAccess
+
+此接口以表示实现类支持快速(通常为恒定时间)随机访问。  
+
+此接口的主要目的是允许通用算法更改其行为，以便于在应用于随机访问列表或顺序访问列表时提供良好的性能。
+
+所以，实现了该接口之后，该集合的随机访问效率是要高于顺序访问的。
+
+### 随机访问
+
+```java
+for(int i = 0;i < list.size();i++) list.get(i);
+```
+
+### 顺序访问
+
+```java
+for(Iterator i = list.iterator(); i.hasNext();) i.next()
+```
+
+### 开发经验
+
+当接收到一个List的子类对象的时候，可以判断子类是否有实现RandomAccess接口，通过以上判断来采取不同的遍历方式。(主要针对ArrayList与LinkedList)，如果实现：推荐使用随机访问的方式进行遍历；否则，使用顺序访问遍历  
+
