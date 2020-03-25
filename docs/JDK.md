@@ -429,3 +429,242 @@ for(Iterator i = list.iterator(); i.hasNext();) i.next()
 
 当接收到一个List的子类对象的时候，可以判断子类是否有实现RandomAccess接口，通过以上判断来采取不同的遍历方式。(主要针对ArrayList与LinkedList)，如果实现：推荐使用随机访问的方式进行遍历；否则，使用顺序访问遍历  
 
+# IO
+
+## NIO
+
+Java NIO(Non-Blocking IO) 是从Java1.4版本开始引入的一套新的IO API，可以替代标准的Java IO API。NIO与原来的IO有同样的作用和目的，但是使用的方式完全不同，NIO支持面向缓冲区的(IO是面向流的)、基于通道的IO操作。NIO将以更高效的方式进行文件的读写操作  
+
+Java API中提供了两套NIO，一套是针对标准输入输出NIO，另一套就是网络编程NIO  
+
+java.nio.channels.Channel  
+  FileChannel:处理本地文件  
+  SocketChannel:TCP网络编程的客户端Channel  
+  ServerSocketChannel:TCP网络编程的服务器端的Channel  
+  DatagramChannel:UDP网络编程中发送端和接收端的Channel  
+
+
+
+Java NIO系统的核心在于：通道(Channel)和缓冲区(Buffer)。通道便是打开到IO设备(例如文件，套接字)的链接。若需要使用NIO系统，需要获取用于连接IO设备的通道以及用于容纳数据的缓冲区。然后操作缓冲区，对数据进行处理。  
+
+**简而言之，Channel负责传输，Buffer负责存储**  
+
+### Channel
+Channel表示IO源与目标打开的连接。Channel类似与传统的"流"。只不过Channel本身不能直接访问数据，Channel只能与Buffer进行交互。  
+
+早期  
+
+<img src="assets/image-20200325185209383.png" alt="image-20200325185209383" style="zoom: 80%;" />  
+
+改进  
+
+<img src="assets/image-20200325185518889.png" alt="image-20200325185518889" style="zoom: 80%;" /> 
+
+> DMA(Direct Memory Access，直接存储器访问) 是所有现代电脑的重要特色，它允许不同速度的硬件装置来沟通，而不需要依赖于 CPU 的大量中断负载。否则，CPU 需要从来源把每一片段的资料复制到暂存器，然后把它们再次写回到新的地方。在这个时间中，CPU 对于其他的工作来说就无法使用。
+>
+> DMA 传输将数据从一个地址空间复制到另外一个地址空间。当CPU 初始化这个传输动作，传输动作本身是由 DMA 控制器来实行和完成。典型的例子就是移动一个外部内存的区块到芯片内部更快的内存区。像是这样的操作并没有让处理器工作拖延，反而可以被重新排程去处理其他的工作。DMA 传输对于高效能 嵌入式系统算法和网络是很重要的。
+>
+> ![DMA](assets/cb8065380cd791232e491073ad345982b2b78008.jpg)  
+>
+> 在实现DMA传输时，是由DMA控制器直接掌管总线，因此，存在着一个总线控制权转移问题。即DMA传输前，CPU要把总线控制权交给DMA控制器，而在结束DMA传输后，DMA控制器应立即把总线控制权再交回给CPU。一个完整的DMA传输过程必须经过DMA请求、DMA响应、DMA传输、DMA结束4个步骤
+
+通道  
+
+<img src="assets/image-20200325190421083.png" alt="image-20200325190421083" style="zoom: 50%;" />  
+
+ 由于DMA也是要向CPU去获取总线控制权的，当大量的IO请求进来时，CPU的利用率也会下降，因为要处理来自DMA的总线控制权的请求。  
+
+而通道不需要向CPU请求，所以相对于DMA操作性能要高一些
+
+#### 获取
+
+获取通道的三种方式：  
+
+1、Java针对支持通道的类提供了getChannel()方法  
+
+  本地IO: FileInputStream/FileOutputStream, RandomAccessFile  
+
+  网络IO: Socket, ServerSocket, DatagramSocket  
+
+2、在JDK1.7中的NIO.2针对各个通道提供了静态方法open()  
+
+3、在JDK1.7中的NIO.2的Files工具类的newByteChannel()  
+
+#### 通道间的数据传输
+
+也是通过直接缓冲区的方式  
+
+transferTo()  
+
+transferFrom()  
+
+#### 分散读取与聚集写入
+
+分散读取(Scattering Read) :   将通道中的数据分散到多个缓冲区中  
+
+聚集写入(Gathering Writes) : 将多个缓冲区中的数据聚集到通道中
+
+### 缓冲区
+
+一个用于特定基本数据类型的容器。有java.nio包定义的，所有缓冲区都是Buffer抽象类的子类  
+
+NIO中的Buffer主要用于与NIO通道进行交互，数据是从通道读入缓冲区，从缓冲区写入通道中的。  
+
+#### 直接缓冲区
+
+![image-20200325173231759](assets/image-20200325173231759.png)  
+
+通过allocateDirect()方法分配直接缓冲区，将缓冲区建立在本地内存中，可以提高效率。  
+
+如果分配直接字节缓冲区，则Java虚拟机会尽最大努力直接在此缓冲区上执行本机I/O操作。也就是说，在每次调用基础操作系统的一个本机I/O操作之前(或之后)，虚拟机都会尽量避免将缓冲区的内容复制到中间缓冲区中(或从中间缓冲区中复制内容)  
+
+直接字节缓冲区可以通过调用allocateDirect()工厂方法来创建。此方法返回的**缓冲区进行分配和取消分配所需成本通常高于非直接缓冲区**。直接缓冲区的内容可以驻留在常规的垃圾回收堆之外。因此，它们对应用程序的内存需求量造成的影响可能并不明显。所以，建议将直接缓冲区主要分配给那些易受基础系统的本机I/O操作影响的大型、持久的缓冲区。一般情况下，最好仅在直接缓冲区能在程序性能方面带来明显好处时分配它们。  
+
+直接字节缓冲区还可以通过**FileChannel的map()方法**，将文件区域直接映射到内存中来创建。该方法返回**MappedByteByteBuffer**。Java平台的实现有助于通过JNI从本机代码创建直接字节缓冲区。如果以上这些缓冲区中的某个缓冲区实例指的是不可访问的内存区域，则试图访问该区域时不会更改该缓冲区的内容，并且将会在某个访问期间内或稍后的某个时间导致抛出不确定的异常。  
+
+字节缓冲区是直接缓冲区还是非直接缓冲区可通过调用isDirect()方法来确定
+
+#### 非直接缓冲区
+
+通过allocate()方法分配缓冲区，将缓冲区建立在JVM的堆内存中。  
+
+![image-20200325171033775](assets/image-20200325171033775.png)  
+
+
+
+### 网络通信
+
+#### 阻塞与非阻塞
+
+传统的 IO 流都是阻塞式的。也就是说，当一个线程调用 read() 或 write() 时，该线程被阻塞，直到有一些数据被读取或写入，该线程在此期间不 能执行其他任务。因此，在完成网络通信进行 IO 操作时，由于线程会 阻塞，所以服务器端必须为每个客户端都提供一个独立的线程进行处理， 当服务器端需要处理大量客户端时，性能急剧下降。  
+
+Java NIO 是非阻塞模式的。当线程从某通道进行读写数据时，若没有数 据可用时，该线程可以进行其他任务。线程通常将非阻塞 IO 的空闲时 间用于在其他通道上执行 IO 操作，所以单独的线程可以管理多个输入 和输出通道。因此，NIO 可以让服务器端使用一个或有限几个线程来同 时处理连接到服务器端的所有客户端。  
+
+### 选择器
+
+选择器（Selector） 是 SelectableChannle 对象的多路复用器，Selector 可 以同时监控多个 SelectableChannel 的 IO 状况，也就是说，利用 Selector 可使一个单独的线程管理多个 Channel。Selector 是非阻塞 IO 的核心。
+
+SelectableChannel结构如下：  
+
+![image-20200325214803512](assets/image-20200325214803512.png)  
+
+> 当调用 register(Selector sel, int ops)  将通道注册选择器时，选择器 对通道的监听事件，需要通过第二个参数 ops 指定。  
+> 可以监听的事件类型（可使用 SelectionKey 的四个常量表示）：  
+> 读 : SelectionKey.OP_READ  （1）  
+> 写 : SelectionKey.OP_WRITE    （4）  
+> 连接 : SelectionKey.OP_CONNECT （8）  
+> 接收 : SelectionKey.OP_ACCEPT  （16）  
+>
+> 若注册时不止监听一个事件，则可以使用“位或”操作符连接。  
+>
+> ![image-20200325214646033](assets/image-20200325214646033.png)  
+
+
+
+![image-20200325214531638](assets/image-20200325214531638.png)  
+
+![image-20200325214550685](assets/image-20200325214550685.png)  
+
+
+
+### 区别
+
+| IO                      | NIO                         |
+| ----------------------- | --------------------------- |
+| 面向流(Stream oriented) | 面向缓冲区(Buffer Oriented) |
+| 阻塞IO(Blocking IO)     | 非阻塞IO(Non Blocking IO)   |
+| (无)                    | 选择器(Selectors)           |
+
+## IO多路复用
+
+### select
+
+select是一个阻塞函数，直到有fd有数据，会将有数据fd在bitmap中的位为1，之后返回，其实就是在轮询判断，只不过将轮询的动作交到了内核态执行，这样减少了上下文的切换(用户直接轮询FD，其实也就是在询问内核FD是否准备就绪，这样涉及到了用户态和内核态的切换，效率不高)
+
+![image-20200325222643263](assets/image-20200325222643263.png)  
+
+select工作流程：
+
+将需要判断的文件FD(文件描述符File Description)收集起来，并交给内核来进行轮询判断哪一个FD有数据，当有一个FD或多个FD有数据时，select函数会返回，并且有数据的FD会被置位。之后用户再自己遍历FD的集合，找到被置位的FD，进行相应的操作
+
+#### 缺点
+
+1、默认指示FD的bitmap大小是1024
+
+2、fd_set每次循环都要重新创建，不可重用
+
+3、虽然rset从用户态拷贝到了内核态，但是仍然需要进行两次用户态和内核态的切换
+
+4、不能明确知道哪一个FD被置位，需要一次遍历FD集合，O(n)
+
+### poll
+
+![image-20200325223914840](assets/image-20200325223914840.png)  
+
+events表示关心哪个事件：读， pollin事件 ；写，pollout事件，都在意，两者或运算一下就可以  
+
+当有FD有数据的时候pollfd中的revents会被置位，接下来只要判断revents是否是POLLIN，如果是则进行数据的相关操作，并将revents置回0  
+
+#### 解决问题
+
+解决了select的FD的bitmap长度限制为1024的问题  
+
+解决了FD_SET不能重用的问题  
+
+### epoll
+
+![image-20200325224840424](assets/image-20200325224840424.png)  
+
+**epoll_create** : 该函数生成一个epoll专用的文件描述符。它其实是在内核申请一空间，用来存放你想关注的socket fd上是否发生以及发生了什么事件。size就是你在这个epoll fd上能关注的最大socket fd数。随你定好了。只要你有空间。可参见上面与select之不同  
+
+> 创建一个epoll的句柄，size用来告诉内核这个监听的数目一共有多大。这个参数不同于select()中的第一个参数，给出最大监听的fd+1的值。需要注意的是，当创建好epoll句柄后，它就是会占用一个fd值，在linux下如果查看/proc/进程id/fd/，是能够看到这个fd的，所以在使用完epoll后，必须调用close()关闭，否则可能导致fd被耗尽  
+
+**epoll_ctl** : epoll的事件注册函数，它不同与select()是在监听事件时告诉内核要监听什么类型的事件，而是在这里先注册要监听的事件类型。  
+
+> 函数声明：int epoll_ctl(int epfd, int op, int fd, struct epoll_event \*event)
+> 该函数用于控制某个epoll文件描述符上的事件，可以注册事件，修改事件，删除事件。
+> 参数：
+> epfd：由 epoll_create 生成的epoll专用的文件描述符；
+> op：要进行的操作例如注册事件，可能的取值EPOLL_CTL_ADD 注册、EPOLL_CTL_MOD 修 改、EPOLL_CTL_DEL 删除
+> fd：关联的文件描述符；
+> event：指向epoll_event的指针；
+> 如果调用成功返回0,不成功返回-1
+>
+> 或者这个解释：
+> 第一个参数是epoll_create()的返回值，
+> 第二个参数表示动作，用三个宏来表示：
+> EPOLL_CTL_ADD：       注册新的fd到epfd中；
+> EPOLL_CTL_MOD：      修改已经注册的fd的监听事件；
+> EPOLL_CTL_DEL：        从epfd中删除一个fd；
+> 第三个参数是需要监听的fd，
+> 第四个参数是告诉内核需要监听什么事件
+>
+> events可以是以下几个宏的集合：
+>        EPOLLIN：            触发该事件，表示对应的文件描述符上有可读数据。(包括对端SOCKET正常关闭)；
+>        EPOLLOUT：         触发该事件，表示对应的文件描述符上可以写数据；
+>        EPOLLPRI：           表示对应的文件描述符有紧急的数据可读（这里应该表示有带外数据到来）；
+>        EPOLLERR：        表示对应的文件描述符发生错误；
+>        EPOLLHUP：        表示对应的文件描述符被挂断；
+>        EPOLLET：           将EPOLL设为边缘触发(Edge Triggered)模式，这是相对于水平触发(Level Triggered)来说的。
+>        EPOLLONESHOT：  只监听一次事件，当监听完这次事件之后，如果还需要继续监听这个socket的话，需要再次把这个socket加入到EPOLL队列里。
+>
+
+**epoll_wait(int epfd, struct epoll_event * events, intmaxevents, int timeout)**
+
+该函数用于轮询I/O事件的发生；
+
+> 参数：
+> epfd:由epoll_create 生成的epoll专用的文件描述符；
+> epoll_event:用于回传待处理事件的数组；
+> maxevents:每次能处理的事件数；
+> timeout:等待I/O事件发生的超时值(单位我也不太清楚)；-1相当于阻塞，0相当于非阻塞。一般用-1即可
+> 返回发生事件数。
+>
+> 参数events用来从内核得到事件的集合，maxevents告之内核这个events有多大(数组成员的个数)，这个maxevents的值不能大于创建epoll_create()时的size，参数timeout是超时时间（毫秒，0会立即返回，-1将不确定，也有说法说是永久阻塞）。
+
+epoll会把有数据的FD放到epoll_event当中，之后返回触发事件的个数
+
+epoll解决了用户态到内核态的开销，因为epfd所使用的内存是内核态与用户态共享的  
+
+也解决了寻找有数据的FD需要遍历所有FD的问题。
+
