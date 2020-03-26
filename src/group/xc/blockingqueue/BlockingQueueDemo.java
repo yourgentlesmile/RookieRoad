@@ -20,10 +20,10 @@ import java.util.concurrent.Semaphore;
  * 7、LinkedBlockingDeque: 由链表结构组成的双向阻塞队列
  *
  * 操作方法分为：
- * 1、方法类型    抛出异常     特殊值       阻塞         超时
- * 2、插入         add(e)     offer(e)     put()        offer(e,time,unit)
- * 2、移除         remove()   poll()       take()       poll(time,unit)
- * 2、检查        element(e)  peek()       NO           NO
+ * 1、方法类型    抛出异常     特殊值       阻塞     超时
+ * 2、插入         add(e)     offer(e)     put()    offer(e,time,unit)
+ * 2、移除         remove()   poll()       take()   poll(time,unit)
+ * 2、检查        element(e)  peek()       NO       NO
  *
  * 抛出异常：
  * 当阻塞队列满时，再往队列里add元素，会抛出IllegalStateException: Queue full
