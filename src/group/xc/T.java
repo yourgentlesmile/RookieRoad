@@ -17,24 +17,37 @@
  */
 package group.xc;
 
+import org.openjdk.jol.info.ClassLayout;
+import org.openjdk.jol.vm.VM;
+
 import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 
 public class T {
-    public static void main(String[] args) throws UnsupportedEncodingException {
-        HashMap<String, String> map = new HashMap<>();
-        map.put("key1", "value1");
-        map.put("key2", "value2");
-        map.put("key3", "value3");
-        map.put("key4", "value4");
-        Set<String> strings = map.keySet();
-        System.out.println(strings.toString());
-        Collection<String> values = map.values();
-        System.out.println(values.toString());
-        Set<Map.Entry<String, String>> entries = map.entrySet();
-        System.out.println(entries.toString());
+    static class A {
+    }
+    static A a;
+    public static void main(String[] args) throws UnsupportedEncodingException, InterruptedException {
+        a = new A();
+        System.out.println(VM.current().details());
+        System.out.println(ClassLayout.parseInstance(a).toPrintable());
+        System.out.println("-=-=-=-=-=-=-=-");
+        Thread thread = new Thread(){
+            @Override
+            public void run() {
+                synchronized (a){
+                    System.out.println(ClassLayout.parseInstance(a).toPrintable());
+                }
+            }
+        };
+        thread.start();
+        TimeUnit.SECONDS.sleep(2);
+        System.out.println("-=-=-=-=" + Integer.toHexString(a.hashCode()));
+        System.out.println(ClassLayout.parseInstance(a).toPrintable());
     }
 }
