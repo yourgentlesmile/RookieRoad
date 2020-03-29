@@ -1073,3 +1073,158 @@ private Node enq(final Node node) {//这里的node就是当前线程封装的nod
 
 > addWaiter方法就是让当前node入队-并且维护队列的链表关系，但是由于情况复杂做了不同处理
 > 主要针对队列是否有初始化，没有初始化则new一个新的Node 作为队首，新的头节点里面的线程为null
+
+# synchronized
+
+## Monitor
+
+synchronized无论是代码块还是synchronized方法，其线程安全的语义实现最终依赖一个叫monitor的东西。  
+
+在HotSpot虚拟机中，monitor是由ObjectMonitor实现的。其源码是用C++来实现的，位于HotSpot虚拟机源码ObjectMonitor.hpp文件中(src/share/vm/runtime/objectMonitor.cpp)。ObjectMonitor主要数据结构有这些。  
+
+```c++
+ObjectMonitor() {
+    _header       = NULL;
+    _count        = 0;
+    _waiters      = 0,
+    _recursions   = 0; //线程重入次数
+    _object       = NULL; //存储该monitor的对象
+    _owner        = NULL; //标示拥有该monitor的线程
+    _WaitSet      = NULL; //处于wait状态的线程，会被加入到_WaitSet
+    _WaitSetLock  = 0 ;
+    _Responsible  = NULL ;
+    _succ         = NULL ;
+    _cxq          = NULL ; //多线程竞争锁时的单向列表
+    FreeNext      = NULL ;
+    _EntryList    = NULL ; //处于等待锁block状态的线程，会被加入到该列表
+    _SpinFreq     = 0 ;
+    _SpinClock    = 0 ;
+    OwnerIsThread = 0 ;
+    _previous_owner_tid = 0;
+}
+```
+
+1、\_owner:初始时为NULL。当有线程占有该monitor时，owner标记为该线程的唯一标示。当线程释放monitor时，owner又恢复为NULL。owner是一个临界资源，JVM是通过CAS操作来保证其线程安全的。(CAS最终实现是依赖与不同平台的CPU指令集,，比如windows平台(src/os_cpu/windows_x86/vm/atomic_windows_x86.inline.hpp))
+
+```c++
+inline jint Atomic::cmpxchg (jint exchange_value, volatile jint* dest, jint compare_value) {
+  // alternative for InterlockedCompareExchange
+  int mp = os::is_MP();
+  __asm {
+    mov edx, dest
+    mov ecx, exchange_value
+    mov eax, compare_value
+    LOCK_IF_MP(mp)
+    cmpxchg dword ptr [edx], ecx
+  }
+}
+```
+
+2、\_cxq：竞争队列，所有请求锁的线程首先会被放在这个队列中(单向链接)，\_cxq是一个临界资源。JVM通过CAS原子指令来修改\_cxq队列。修改前\_cxq的旧值填入了node的next字段，\_cxq指向新值(新线程)。因此，\_cxq是一个后进先出的stack。  
+
+3、\_EntryList: \_cxq队列中有资格成为候选资源的线程会被移动到该队列。  
+
+4、\_WaitSet：因为调用wait方法而被阻塞的线程会被放在该队列中。  
+
+每一个Java对象都可以与一个监视器monitor关联，我们可以把它理解成一把锁，当一个线程想要执行一段被synchronized圈起来的同步方法或者代码块时。该线程得先获取到synchronized修饰的对象对应的monitor。  
+
+Java代码中不会显示地去创建这么一个monitor对象，我们也无需创建。   
+
+monitor并不是随着对象创建而创建的。我们是通过synchronized修饰符告诉JVM需要为我们的某个对象创建关联的monitor对象。每个线程都存在两个ObjectMonitor对象列表，分别为free和used列表。同时JVM中也维护着global locklist。当线程需要ObjectMonitor对象时，首先从线程自身的free表中申请，若存在则使用，若不存在则从global list中申请。  
+
+ObjectMonitor的数据结构中包含:\_owner,\_WaitSet,\_EntryList，它们之间的关系转换可以用下图表示：  
+
+![image-20200329183649214](assets/image-20200329183649214.png)  
+
+待完善。。。。
+
+## 锁升级过程
+
+高效并发是从JDK1.5到JDK1.6的一个重要改进，提供了各种锁优化技术，包括偏向锁(Biased Locking)、轻量级锁(LightWeight Locking)、适应性自旋(Adaptive Spinning)、锁消除(Lock Elimination)、锁粗化(Lock Coaesening)等。  
+
+无锁 -> 偏向锁 -> 轻量级锁 -> 重量级锁
+
+### Java对象布局
+
+对象在内存中的布局分为三块区域：对象头，实例数据和对齐填充(**当前两部分对齐了8的倍数时，则无需填充**，所以对齐填充的数据区域不一定是必须存在的)。  
+
+![image-20200329194533792](assets/image-20200329194533792.png)  
+
+```c++
+class oopDesc {
+  friend class VMStructs;
+ private:
+  volatile markOop  _mark;
+  union _metadata {
+    //未开启指针压缩的指针
+    Klass*      _klass;
+    //开启了指针压缩的指针
+    narrowKlass _compressed_klass;
+  } _metadata;
+    
+  // Fast access to barrier set.  Must be initialized.
+  static BarrierSet* _bs;
+  ...
+}
+```
+
+在普通实例对象中，oopDesc的定义包含两个成员，分别是`_mark `和`_metadata`  
+
+`_mark`表示对象标记、属于markOop类型，也就是常说的Mark word，它记录了和锁有关的信息。  
+
+`_metadata`表示类的元信息，类的元信息存储的是对象指向它的类元数据(Klass)的首地址，其中`_Klass`表示普通指针，`_compressed_klass`表示压缩类指针。  
+
+对象头由两部分组成，一部分用于存储自身的运行时数据，称之为Mark Word，另一部分是类型指针，及对象指向它的类元数据的指针。  
+
+#### Mark Word
+
+Mark Word用于存储对象自身的运行时数据，如HashCode、GC分代年龄、锁状态标志、线程持有的锁、锁偏向线程ID、偏向时间戳等等，**占用内存大小与虚拟机位长一致(32位虚拟机则Mark Word占对象头32位，64位虚拟机则占用64位)**，Mark Word对应的类型是markOop。  
+
+![image-20200329200047604](assets/image-20200329200047604.png)  
+
+64位虚拟机：    
+
+![image-20200329200140196](assets/image-20200329200140196.png)  
+
+锁状态官方解释：  
+
+```c++
+//  - the two lock bits are used to describe three states: locked/unlocked and monitor.
+//
+//[ptr          | 00]  locked       ptr points to real header on stack
+//[header   | 0 | 01]  unlocked     regular object header
+//[ptr          | 10]  monitor      inflated lock (header is wapped out)
+//[ptr          | 11]  marked       used by markSweep to mark an object
+//                                  not valid at any other time
+```
+
+#### klass pointer
+
+这一部分用于存储对象的类型指针，该指针指向它的类元数据，JVM通过这个指针确定对象是哪个类的实例。该指针的位长度为JVM的一个字(Word)大小，即32位虚拟机为32位，64位虚拟机为64位。  
+
+如果应用的对象过多，使用64位的指针将浪费大量内存，统计而言，64位的JVM将会比32位的JVM多耗费50%内存。为了节约内存可以使用选项`-XX:UseCompressedOops`开启指针压缩。  其中，oop即(ordinary object pointer)普通对象指针。开启该选项后，下列指针将压缩至32位：  
+
+1. 每个Class的属性指针(即静态变量)
+2. 每个对象的属性指针(即对象变量)
+3. 普通对象数组的每个元素指针
+
+当然，也不是所有的指针都会压缩，一些特殊类型的指针JVM不会优化，比如指向PermGen的Class对象指针(JDK8中指向元空间的Class对象指针)、本地变量、堆栈元素、入参、返回值和NULL指针等。  
+
+> 注意：在64位虚拟机此选项默认是开启的
+>
+> 使用 java -XX:+PrintFlagsFinal -version可以查看默认
+>
+> bool UseCompressedOops                        := true                                {lp64_product}
+
+在32位系统中，Mark Word = 4bytes，类型指针 = 4bytes，对象头 = 8 byte = 64bit  
+
+在64位系统中，Mark Word = 8bytes，类型指针 = 8bytes，对象头 = 16bytes = 128bit  
+
+### 实例数据
+
+就是类中定义的成员变量
+
+### 对齐填充
+
+对齐填充并不是必然存在，也没有什么特别的意义，他仅仅起着占位符的作用，用于HotSpot VM的自动内存管理系统要求对象起始地址必须是8字节的整数倍，换句话说，就是对象的大小必须是8字节的整数倍。而对象头正好是8字节的倍数，因此，当对象实例数据部分没有对齐时，就需要通过对齐填充来补全。  
+
