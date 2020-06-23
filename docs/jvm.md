@@ -539,6 +539,8 @@ BootstrapClassLoader是获取不到它的引用的，也意味着所有通过Boo
 
 ## RunTime Data Area
 
+![image-20200623163002628](assets/image-20200623163002628.png)
+
 ### Native Method Stack 本地方法栈(线程私有)
 
 它的具体做法是NativeMethod Stack中登记native方法，在Execution Engine执行时加载本地方法库。  
