@@ -1132,7 +1132,9 @@ inline jint Atomic::cmpxchg (jint exchange_value, volatile jint* dest, jint comp
 
 Java代码中不会显示地去创建这么一个monitor对象，我们也无需创建。   
 
-monitor并不是随着对象创建而创建的。我们是通过synchronized修饰符告诉JVM需要为我们的某个对象创建关联的monitor对象。每个线程都存在两个ObjectMonitor对象列表，分别为free和used列表。同时JVM中也维护着global locklist。当线程需要ObjectMonitor对象时，首先从线程自身的free表中申请，若存在则使用，若不存在则从global list中申请。  
+monitor并不是随着对象创建而创建的。我们是通过synchronized修饰符告诉JVM需要为我们的某个对象创建关联的monitor对象。每个线程都存在两个ObjectMonitor对象列表，分别为free和used列表。同时JVM中也维护着global locklist。当线程需要ObjectMonitor对象时，首先从线程自身的free表中申请，若存在则使用，若不存在则从global list中申请。 
+
+> 关于global lock list https://www.ibm.com/developerworks/cn/java/j-rtj3/index.html
 
 ObjectMonitor的数据结构中包含:\_owner,\_WaitSet,\_EntryList，它们之间的关系转换可以用下图表示：  
 
